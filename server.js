@@ -3,17 +3,36 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 
 const app = express();
-app.use(express.json());
-app.use(cors());
 
-// رابط الاتصال بقاعدة البيانات الخاصة بك
+app.use(express.json());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// الاتصال بقاعدة البيانات
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://rtdx2015_db_user:ZNqlDTSL5J8IpvM6@cluster0.ekpznch.mongodb.net/inventory?appName=Cluster0";
 
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ تم الاتصال بقاعدة البيانات MongoDB بنجاح'))
-  .catch(err => console.error('❌ خطأ في الاتصال بقاعدة البيانات:', err));
+let isConnected = false;
+const connectDB = async () => {
+  if (isConnected) return;
+  try {
+    await mongoose.connect(MONGO_URI);
+    isConnected = true;
+    console.log('✅ تم الاتصال بـ MongoDB');
+  } catch (err) {
+    console.error('❌ خطأ في الاتصال:', err);
+  }
+};
 
-// تعريف شكل بيانات المنتج
+// ضمان الاتصال قبل كل طلب
+app.use(async (req, res, next) => {
+  await connectDB();
+  next();
+});
+
+// Schema & Model
 const ProductSchema = new mongoose.Schema({
   name: { type: String, required: true },
   quantity: { type: Number, default: 0 },
@@ -22,9 +41,9 @@ const ProductSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-const Product = mongoose.model('Product', ProductSchema);
+const Product = mongoose.models.Product || mongoose.model('Product', ProductSchema);
 
-// 1. جلب جميع المنتجات
+// API Endpoints
 app.get('/api/products', async (req, res) => {
   try {
     const products = await Product.find();
@@ -34,7 +53,6 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-// 2. إضافة منتج جديد
 app.post('/api/products', async (req, res) => {
   try {
     const newProduct = new Product(req.body);
@@ -45,15 +63,13 @@ app.post('/api/products', async (req, res) => {
   }
 });
 
-// 3. حذف منتج
 app.delete('/api/products/:id', async (req, res) => {
   try {
     await Product.findByIdAndDelete(req.params.id);
-    res.json({ message: 'تم حذف المنتج بنجاح' });
+    res.json({ message: 'تم الحذف بنجاح' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 السيرفر يعمل على المنفذ ${PORT}`));
+module.exports = app;
